@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
@@ -26,14 +27,39 @@ class WeatherService:
         base_url: str,
         timezone: str = "auto",
         timeout_seconds: float = 20,
+        cache_ttl_seconds: float = 900,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self.base_url = base_url
         self.timezone = timezone
         self.timeout_seconds = timeout_seconds
+        self.cache_ttl_seconds = cache_ttl_seconds
         self.client = client
+        self._cache: dict[tuple[float, float], tuple[datetime, WeatherSnapshot]] = {}
+        self._cache_lock = asyncio.Lock()
 
     async def fetch_snapshot(
+        self,
+        latitude: float,
+        longitude: float,
+    ) -> WeatherSnapshot:
+        cache_key = (round(latitude, 4), round(longitude, 4))
+        now = datetime.now(timezone.utc)
+
+        async with self._cache_lock:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                cached_at, snapshot = cached
+                if now - cached_at < timedelta(seconds=self.cache_ttl_seconds):
+                    return snapshot
+
+        snapshot = await self._fetch_from_api(latitude, longitude)
+
+        async with self._cache_lock:
+            self._cache[cache_key] = (now, snapshot)
+        return snapshot
+
+    async def _fetch_from_api(
         self,
         latitude: float,
         longitude: float,
@@ -155,4 +181,5 @@ def get_weather_service() -> WeatherService:
         base_url=settings.open_meteo_base_url,
         timezone=settings.weather_timezone,
         timeout_seconds=settings.external_api_timeout_seconds,
+        cache_ttl_seconds=settings.weather_cache_ttl_seconds,
     )

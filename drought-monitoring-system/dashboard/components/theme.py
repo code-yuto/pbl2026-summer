@@ -470,6 +470,30 @@ def inject_theme() -> None:
             overflow: hidden;
         }
 
+        [data-testid="stChatMessage"] {
+            margin: 0.7rem 0;
+            padding: 0.9rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.022);
+        }
+
+        [data-testid="stChatMessage"] p {
+            color: #D5E3D9;
+            line-height: 1.65;
+        }
+
+        [data-testid="stChatInput"] {
+            border-color: var(--border-strong) !important;
+            border-radius: 14px !important;
+            background: rgba(7, 19, 15, 0.78) !important;
+        }
+
+        [data-testid="stAlert"] {
+            border-radius: 13px;
+            border-color: var(--border) !important;
+        }
+
         @media (max-width: 900px) {
             .block-container { padding: 1.4rem 1rem 3rem; }
             .page-header { align-items: flex-start; flex-direction: column; gap: 1rem; }
@@ -504,7 +528,7 @@ def render_sidebar_status() -> None:
                 <span class="status-dot"></span>Analytics workspace
             </div>
             <div style="margin-top:.35rem;color:#7F9787;font-size:.7rem;">
-                API-aware · Demo fallback enabled
+                USB Serial · Live APIs · Session memory
             </div>
         </div>
         """,

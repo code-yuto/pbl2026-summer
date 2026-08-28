@@ -40,21 +40,36 @@ def display_value(value, suffix: str = "") -> str:
     return f"{value}{suffix}"
 
 
-snapshot = load_dashboard_snapshot()
+snapshot = load_dashboard_snapshot(
+    base_url=st.session_state.get("backend_url")
+)
 history = snapshot.history.copy()
-latest = history.iloc[-1]
-comparison = history.iloc[-25] if len(history) > 24 else history.iloc[0]
 
 render_page_header(
     title="Field overview",
     subtitle=(
-        "A unified view of sensor readings, Open-Meteo conditions and the "
-        "latest Gemini drought explanation."
+        "A unified view of live USB sensor readings, Open-Meteo conditions "
+        "and the latest Gemini drought explanation."
     ),
     source=snapshot.source,
     eyebrow="Live operations",
 )
 st.caption(snapshot.source_details)
+
+if history.empty:
+    st.warning(
+        "No live sensor data has reached FastAPI yet. Start the USB serial "
+        "bridge, then select Connect and refresh in the sidebar."
+    )
+    st.code(
+        "python scripts\\serial_bridge.py --port COM3 "
+        "--backend-url http://127.0.0.1:8000",
+        language="powershell",
+    )
+    st.stop()
+
+latest = history.iloc[-1]
+comparison = history.iloc[-25] if len(history) > 24 else history.iloc[0]
 
 updated_at = pd.Timestamp(latest["created_at"]).to_pydatetime()
 render_status_banner(str(latest["risk_level"]), updated_at)
@@ -164,7 +179,7 @@ with st.container(border=True):
             ]
         else:
             weather_rows = [
-                {"Variable": "Weather feed", "Value": "No live snapshot", "Source": "Demo fallback active"}
+                {"Variable": "Weather feed", "Value": "API unavailable", "Source": "Open-Meteo"}
             ]
         st.dataframe(pd.DataFrame(weather_rows), hide_index=True, width="stretch")
 
@@ -204,36 +219,45 @@ with bottom_right:
     with st.container(border=True):
         render_section_header(
             "Weather pressure",
-            "Live Open-Meteo snapshots" if snapshot.weather_live else "Demo preview",
+            "Live Open-Meteo snapshot" if snapshot.weather_live else "Waiting for API",
         )
-        st.plotly_chart(
-            weather_forecast_chart(snapshot.weather),
-            width="stretch",
-            config=PLOTLY_CONFIG,
-        )
+        if snapshot.weather_live:
+            st.plotly_chart(
+                weather_forecast_chart(snapshot.weather),
+                width="stretch",
+                config=PLOTLY_CONFIG,
+            )
+        else:
+            st.info("Open-Meteo data is currently unavailable.")
 
 st.write("")
-latest_report = snapshot.reports[0]
 with st.container(border=True):
     render_section_header(
         "Gemini drought explanation",
-        "Saved live assessment" if snapshot.reports_live else "Demo explanation",
+        "Current FastAPI session",
     )
-    render_ai_advisory(
-        title=str(latest_report["title"]),
-        explanation=str(latest_report["explanation"]),
-        risk_level=str(latest_report["risk_level"]),
-        confidence=latest_report.get("confidence", "low"),
-    )
-    driver_column, action_column = st.columns(2, gap="large")
-    with driver_column:
-        st.markdown("**Main drought drivers**")
-        for driver in latest_report.get("drivers", []):
-            st.markdown(f"- {driver}")
-    with action_column:
-        st.markdown("**Recommended actions**")
-        for recommendation in latest_report.get("recommendations", []):
-            st.markdown(f"- {recommendation}")
+    if snapshot.reports:
+        latest_report = snapshot.reports[0]
+        render_ai_advisory(
+            title=str(latest_report["title"]),
+            explanation=str(latest_report["explanation"]),
+            risk_level=str(latest_report["risk_level"]),
+            confidence=latest_report.get("confidence", "low"),
+        )
+        driver_column, action_column = st.columns(2, gap="large")
+        with driver_column:
+            st.markdown("**Main drought drivers**")
+            for driver in latest_report.get("drivers", []):
+                st.markdown(f"- {driver}")
+        with action_column:
+            st.markdown("**Recommended actions**")
+            for recommendation in latest_report.get("recommendations", []):
+                st.markdown(f"- {recommendation}")
+    else:
+        st.info(
+            "No Gemini forecast has been generated in this FastAPI session. "
+            "Use Generate latest forecast on the Forecast AI chat page."
+        )
 
 st.write("")
 with st.container(border=True):

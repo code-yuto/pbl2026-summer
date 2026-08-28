@@ -1,3 +1,5 @@
+import os
+
 import streamlit as st
 
 from components.theme import inject_theme, render_brand, render_sidebar_status
@@ -15,6 +17,15 @@ inject_theme()
 
 with st.sidebar:
     render_brand()
+    st.text_input(
+        "FastAPI URL",
+        value=os.getenv("BACKEND_URL", "http://localhost:8000"),
+        key="backend_url",
+        help=(
+            "Paste the HTTPS ngrok URL for FastAPI, without a trailing slash."
+        ),
+        placeholder="https://example.ngrok-free.app",
+    )
 
 pages = {
     "Workspace": [
@@ -36,7 +47,7 @@ pages = {
         ),
         st.Page(
             "pages/4_LLM_Reports.py",
-            title="AI field reports",
+            title="Forecast AI chat",
             icon=":material/auto_awesome:",
         ),
     ]
@@ -47,12 +58,12 @@ navigation = st.navigation(pages, position="sidebar")
 with st.sidebar:
     render_sidebar_status()
     if st.button(
-        "Refresh live data",
+        "Connect and refresh",
         icon=":material/refresh:",
         width="stretch",
     ):
         st.cache_data.clear()
         st.rerun()
-    st.caption("TerraPulse prototype · v0.2")
+    st.caption("TerraPulse prototype · v0.4 · No database")
 
 navigation.run()

@@ -6,12 +6,8 @@ import httpx
 import pandas as pd
 import streamlit as st
 
-from services.demo_data import (
-    create_demo_alerts,
-    create_demo_history,
-    create_demo_reports,
-    create_demo_weather,
-)
+
+NGROK_HEADERS = {"ngrok-skip-browser-warning": "true"}
 
 
 @dataclass
@@ -29,14 +25,27 @@ class DashboardSnapshot:
 
 
 class BackendClient:
-    def __init__(self, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str | None = None,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         self.base_url = (
             base_url
             or os.getenv("BACKEND_URL", "http://localhost:8000")
         ).rstrip("/")
+        self.transport = transport
+
+    def _client(self, timeout: float) -> httpx.Client:
+        return httpx.Client(
+            timeout=timeout,
+            trust_env=False,
+            transport=self.transport,
+            headers=NGROK_HEADERS,
+        )
 
     def is_online(self) -> bool:
-        with httpx.Client(timeout=2.5, trust_env=False) as client:
+        with self._client(timeout=2.5) as client:
             response = client.get(f"{self.base_url}/health")
             response.raise_for_status()
             return response.json().get("status") == "healthy"
@@ -47,7 +56,7 @@ class BackendClient:
         limit: int,
         timeout: float = 8,
     ) -> list[dict[str, Any]]:
-        with httpx.Client(timeout=timeout, trust_env=False) as client:
+        with self._client(timeout=timeout) as client:
             response = client.get(
                 f"{self.base_url}{path}",
                 params={"limit": limit},
@@ -62,7 +71,7 @@ class BackendClient:
     def get_history(self, limit: int = 720) -> pd.DataFrame:
         records = self._get_records("/api/dashboard/readings", limit)
         if not records:
-            raise ValueError("Backend has no sensor readings")
+            raise ValueError("No live sensor readings have been received")
 
         frame = pd.DataFrame(records)
         frame["created_at"] = pd.to_datetime(frame["created_at"], utc=True)
@@ -72,7 +81,7 @@ class BackendClient:
     def get_weather(self, limit: int = 100) -> pd.DataFrame:
         records = self._get_records("/api/dashboard/weather", limit)
         if not records:
-            raise ValueError("Backend has no weather snapshots")
+            raise ValueError("No session weather snapshots are available")
 
         frame = pd.DataFrame(records)
         frame["observed_at"] = pd.to_datetime(frame["observed_at"], utc=True)
@@ -80,11 +89,54 @@ class BackendClient:
             frame["fetched_at"] = pd.to_datetime(frame["fetched_at"], utc=True)
         return frame.sort_values("observed_at").reset_index(drop=True)
 
+    def get_current_weather(self) -> pd.DataFrame:
+        with self._client(timeout=20) as client:
+            response = client.get(f"{self.base_url}/api/weather")
+            response.raise_for_status()
+            record = response.json()
+        if not isinstance(record, dict) or not record.get("observed_at"):
+            raise ValueError("Open-Meteo returned invalid weather data")
+        frame = pd.DataFrame([record])
+        frame["observed_at"] = pd.to_datetime(frame["observed_at"], utc=True)
+        return frame
+
     def get_assessments(self, limit: int = 100) -> list[dict[str, object]]:
         records = self._get_records("/api/dashboard/assessments", limit)
         if not records:
-            raise ValueError("Backend has no Gemini assessments")
+            raise ValueError("No Gemini assessments exist in this session")
         return [_normalize_assessment(record) for record in records]
+
+    def analyze_latest(self) -> dict[str, Any]:
+        with self._client(timeout=45) as client:
+            response = client.post(
+                f"{self.base_url}/api/drought/analyze/latest"
+            )
+            response.raise_for_status()
+            result = response.json()
+        if not isinstance(result, dict):
+            raise ValueError("Latest forecast endpoint returned invalid data")
+        return result
+
+    def ask_forecast(
+        self,
+        question: str,
+        assessment_id: int,
+        history: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        with self._client(timeout=45) as client:
+            response = client.post(
+                f"{self.base_url}/api/drought/chat",
+                json={
+                    "question": question,
+                    "assessment_id": assessment_id,
+                    "history": history[-8:],
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+        if not isinstance(result, dict) or not result.get("answer"):
+            raise ValueError("Forecast chat endpoint returned invalid data")
+        return result
 
 
 def _add_missing_sensor_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -222,25 +274,62 @@ def _source_description(
     reports_live: bool,
 ) -> tuple[str, str]:
     states = {
-        "Sensors": "Live" if history_live else "Demo",
-        "Weather": "Live" if weather_live else "Demo",
-        "Gemini": "Live" if reports_live else "Demo",
+        "Sensors": "USB Serial" if history_live else "Waiting",
+        "Weather": "Open-Meteo" if weather_live else "Waiting",
+        "Gemini": "Live session" if reports_live else "Waiting",
     }
     details = " · ".join(f"{name}: {value}" for name, value in states.items())
     if all((history_live, weather_live, reports_live)):
-        return "Live data + Gemini", details
+        return "Live sensors + APIs", details
     if any((history_live, weather_live, reports_live)):
-        return "Mixed live/demo data", details
-    return "Demo data", details
+        return "Partial live data", details
+    return "Waiting for live data", details
 
 
-@st.cache_data(ttl=30, show_spinner=False)
-def load_dashboard_snapshot(limit: int = 720) -> DashboardSnapshot:
-    client = BackendClient()
+def _empty_history() -> pd.DataFrame:
+    return _add_missing_sensor_columns(
+        pd.DataFrame(
+            columns=[
+                "id",
+                "device_id",
+                "soil_moisture",
+                "water_level",
+                "created_at",
+            ]
+        )
+    )
+
+
+def _empty_weather() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "observed_at",
+            "temperature_c",
+            "humidity_percent",
+            "precipitation_mm",
+            "recent_precipitation_7d_mm",
+            "forecast_precipitation_3d_mm",
+            "forecast_precipitation_7d_mm",
+            "evapotranspiration_mm",
+            "forecast_evapotranspiration_7d_mm",
+            "forecast_temperature_max_3d_c",
+        ]
+    )
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_dashboard_snapshot(
+    limit: int = 720,
+    base_url: str | None = None,
+) -> DashboardSnapshot:
+    client = BackendClient(base_url=base_url)
     backend_online = False
     history_live = False
     weather_live = False
     reports_live = False
+    history = _empty_history()
+    weather = _empty_weather()
+    reports: list[dict[str, object]] = []
 
     try:
         backend_online = client.is_online()
@@ -252,32 +341,28 @@ def load_dashboard_snapshot(limit: int = 720) -> DashboardSnapshot:
             history = client.get_history(limit=limit)
             history_live = True
         except (httpx.HTTPError, ValueError, KeyError):
-            history = create_demo_history(hours=limit)
+            history = _empty_history()
 
         try:
             weather = client.get_weather(limit=min(limit, 1000))
             weather_live = True
         except (httpx.HTTPError, ValueError, KeyError):
-            weather = create_demo_weather()
+            try:
+                weather = client.get_current_weather()
+                weather_live = True
+            except (httpx.HTTPError, ValueError, KeyError):
+                weather = _empty_weather()
 
         try:
             reports = client.get_assessments(limit=100)
             reports_live = True
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
-            reports = create_demo_reports()
-    else:
-        history = create_demo_history(hours=limit)
-        weather = create_demo_weather()
-        reports = create_demo_reports()
+            reports = []
 
     if history_live and weather_live:
         history = _merge_weather_into_history(history, weather)
 
-    alerts = (
-        _build_live_alerts(history)
-        if history_live
-        else create_demo_alerts(history)
-    )
+    alerts = _build_live_alerts(history)
     source, source_details = _source_description(
         history_live,
         weather_live,

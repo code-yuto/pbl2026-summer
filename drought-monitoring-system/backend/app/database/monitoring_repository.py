@@ -57,6 +57,32 @@ class MonitoringRepository:
 
             return saved
 
+    def _update(
+        self,
+        table: str,
+        record_id: int,
+        updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        with _write_lock:
+            records = self._read_all(table)
+            updated_record = None
+            for record in records:
+                if record.get("id") == record_id:
+                    record.update(updates)
+                    updated_record = record
+                    break
+
+            if updated_record is None:
+                raise ValueError(
+                    f"No record with id {record_id} in table {table!r}"
+                )
+
+            with self._table_file(table).open("w", encoding="utf-8") as handle:
+                for record in records:
+                    handle.write(json.dumps(record, default=str) + "\n")
+
+            return updated_record
+
     def _history(
         self,
         table: str,
@@ -76,6 +102,13 @@ class MonitoringRepository:
         history = self._history("monitoring_data", limit=1)
         return history[0] if history else None
 
+    def update_reading_analysis(
+        self,
+        reading_id: int,
+        updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self._update("monitoring_data", reading_id, updates)
+
     def get_reading_history(self, limit: int = 100) -> list[dict[str, Any]]:
         return self._history("monitoring_data", limit)
 
@@ -94,6 +127,51 @@ class MonitoringRepository:
 
     def get_drought_assessment_history(self, limit: int = 100) -> list[dict[str, Any]]:
         return self._history("drought_assessments", limit)
+
+    def get_latest_drought_assessment(self) -> dict[str, Any] | None:
+        history = self._history("drought_assessments", limit=1)
+        return history[0] if history else None
+
+    def get_drought_chat_context(
+        self,
+        assessment_id: int | None = None,
+    ) -> dict[str, Any] | None:
+        assessments = self._read_all("drought_assessments")
+        if not assessments:
+            return None
+
+        if assessment_id is None:
+            assessment = max(assessments, key=lambda row: row.get("id", 0))
+        else:
+            assessment = next(
+                (row for row in assessments if row.get("id") == assessment_id),
+                None,
+            )
+        if assessment is None:
+            return None
+
+        readings = self._read_all("monitoring_data")
+        sensor = next(
+            (
+                row
+                for row in readings
+                if row.get("id") == assessment.get("monitoring_id")
+            ),
+            None,
+        )
+        weather_records = self._read_all("weather_data")
+        weather = next(
+            (
+                row
+                for row in weather_records
+                if row.get("id") == assessment.get("weather_id")
+            ),
+            None,
+        )
+        if sensor is None or weather is None:
+            return None
+
+        return {"sensor": sensor, "weather": weather, "assessment": assessment}
 
 
 @lru_cache

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     )
     external_api_timeout_seconds: float = 20
 
+    analysis_poll_interval_seconds: float = 60
+    weather_cache_ttl_seconds: float = 900
+
     soil_critical_threshold: float = 20
     soil_high_threshold: float = 25
     soil_medium_threshold: float = 40

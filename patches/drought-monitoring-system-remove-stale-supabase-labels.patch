@@ -1,0 +1,119 @@
+diff --git a/backend/app/api/dashboard.py b/backend/app/api/dashboard.py
+index 58e6359..efd48b2 100644
+--- a/backend/app/api/dashboard.py
++++ b/backend/app/api/dashboard.py
+@@ -21,7 +21,7 @@ async def _repository_call(method, *args) -> Any:
+         logger.exception("Unable to retrieve dashboard data")
+         raise HTTPException(
+             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+-            detail="Unable to retrieve dashboard data from Supabase",
++            detail="Unable to retrieve dashboard data from the backend",
+         ) from error
+ 
+ 
+diff --git a/backend/app/services/monitoring_service.py b/backend/app/services/monitoring_service.py
+index f2eb030..9416f20 100644
+--- a/backend/app/services/monitoring_service.py
++++ b/backend/app/services/monitoring_service.py
+@@ -118,7 +118,7 @@ class MonitoringService:
+             )
+         except Exception as error:
+             raise MonitoringPersistenceError(
+-                "Unable to store the drought assessment in Supabase"
++                "Unable to store the drought assessment"
+             ) from error
+ 
+         return DroughtAnalysisResponse(
+diff --git a/dashboard/pages/1_Live_Monitoring.py b/dashboard/pages/1_Live_Monitoring.py
+index 8b23e08..261bcd1 100644
+--- a/dashboard/pages/1_Live_Monitoring.py
++++ b/dashboard/pages/1_Live_Monitoring.py
+@@ -164,7 +164,7 @@ with st.container(border=True):
+             ]
+         else:
+             weather_rows = [
+-                {"Variable": "Weather feed", "Value": "No Supabase snapshot", "Source": "Demo fallback active"}
++                {"Variable": "Weather feed", "Value": "No live snapshot", "Source": "Demo fallback active"}
+             ]
+         st.dataframe(pd.DataFrame(weather_rows), hide_index=True, width="stretch")
+ 
+@@ -204,7 +204,7 @@ with bottom_right:
+     with st.container(border=True):
+         render_section_header(
+             "Weather pressure",
+-            "Supabase Open-Meteo snapshots" if snapshot.weather_live else "Demo preview",
++            "Live Open-Meteo snapshots" if snapshot.weather_live else "Demo preview",
+         )
+         st.plotly_chart(
+             weather_forecast_chart(snapshot.weather),
+@@ -217,7 +217,7 @@ latest_report = snapshot.reports[0]
+ with st.container(border=True):
+     render_section_header(
+         "Gemini drought explanation",
+-        "Saved Supabase assessment" if snapshot.reports_live else "Demo explanation",
++        "Saved live assessment" if snapshot.reports_live else "Demo explanation",
+     )
+     render_ai_advisory(
+         title=str(latest_report["title"]),
+diff --git a/dashboard/pages/4_LLM_Reports.py b/dashboard/pages/4_LLM_Reports.py
+index b4b9754..c9c67e4 100644
+--- a/dashboard/pages/4_LLM_Reports.py
++++ b/dashboard/pages/4_LLM_Reports.py
+@@ -22,7 +22,7 @@ render_page_header(
+         "measurements and Open-Meteo forecast conditions."
+     ),
+     source=(
+-        "Gemini reports from Supabase"
++        "Gemini reports from live data"
+         if snapshot.reports_live
+         else "Gemini demonstration report"
+     ),
+diff --git a/dashboard/services/backend_client.py b/dashboard/services/backend_client.py
+index dae442f..211854a 100644
+--- a/dashboard/services/backend_client.py
++++ b/dashboard/services/backend_client.py
+@@ -62,7 +62,7 @@ class BackendClient:
+     def get_history(self, limit: int = 720) -> pd.DataFrame:
+         records = self._get_records("/api/dashboard/readings", limit)
+         if not records:
+-            raise ValueError("Supabase contains no sensor readings")
++            raise ValueError("Backend has no sensor readings")
+ 
+         frame = pd.DataFrame(records)
+         frame["created_at"] = pd.to_datetime(frame["created_at"], utc=True)
+@@ -72,7 +72,7 @@ class BackendClient:
+     def get_weather(self, limit: int = 100) -> pd.DataFrame:
+         records = self._get_records("/api/dashboard/weather", limit)
+         if not records:
+-            raise ValueError("Supabase contains no weather snapshots")
++            raise ValueError("Backend has no weather snapshots")
+ 
+         frame = pd.DataFrame(records)
+         frame["observed_at"] = pd.to_datetime(frame["observed_at"], utc=True)
+@@ -83,7 +83,7 @@ class BackendClient:
+     def get_assessments(self, limit: int = 100) -> list[dict[str, object]]:
+         records = self._get_records("/api/dashboard/assessments", limit)
+         if not records:
+-            raise ValueError("Supabase contains no Gemini assessments")
++            raise ValueError("Backend has no Gemini assessments")
+         return [_normalize_assessment(record) for record in records]
+ 
+ 
+@@ -222,13 +222,13 @@ def _source_description(
+     reports_live: bool,
+ ) -> tuple[str, str]:
+     states = {
+-        "Sensors": "Supabase" if history_live else "Demo",
+-        "Weather": "Supabase" if weather_live else "Demo",
+-        "Gemini": "Supabase" if reports_live else "Demo",
++        "Sensors": "Live" if history_live else "Demo",
++        "Weather": "Live" if weather_live else "Demo",
++        "Gemini": "Live" if reports_live else "Demo",
+     }
+     details = " · ".join(f"{name}: {value}" for name, value in states.items())
+     if all((history_live, weather_live, reports_live)):
+-        return "Supabase + Gemini live", details
++        return "Live data + Gemini", details
+     if any((history_live, weather_live, reports_live)):
+         return "Mixed live/demo data", details
+     return "Demo data", details

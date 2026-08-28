@@ -1,0 +1,7 @@
+{
+  "_description": "The sketch also prints the same JSON object (see json-payload-wifi.json for the full set of examples) to USB Serial as a debugging aid, alongside its primary Wi-Fi transport. See implementation-rules-serial.md. This file is documentation only -- the device does not send a wrapper object, each reading is its own line.",
+  "examples": {
+    "alert_critical_dry_no_water": { "type": "alert_critical_dry_no_water", "water_level": 100, "soil_moisture": 3000, "led_color": "PURPLE", "timestamp_ms": 222 },
+    "data_ideal": { "type": "data_ideal", "water_level": 1600, "soil_moisture": 1700, "led_color": "GREEN", "timestamp_ms": 888 }
+  }
+}

@@ -1,0 +1,69 @@
+diff --git a/backend/tests/conftest.py b/backend/tests/conftest.py
+new file mode 100644
+index 0000000..91d22d9
+--- /dev/null
++++ b/backend/tests/conftest.py
+@@ -0,0 +1,6 @@
++import sys
++from pathlib import Path
++
++REPO_ROOT = Path(__file__).resolve().parents[2]
++if str(REPO_ROOT) not in sys.path:
++    sys.path.insert(0, str(REPO_ROOT))
+diff --git a/backend/tests/test_analysis_api.py b/backend/tests/test_analysis_api.py
+index 0bd4efe..1bd0ef6 100644
+--- a/backend/tests/test_analysis_api.py
++++ b/backend/tests/test_analysis_api.py
+@@ -1,4 +1,4 @@
+-from datetime import UTC, datetime
++from datetime import datetime, timezone
+ from typing import Any
+ 
+ from fastapi.testclient import TestClient
+@@ -16,7 +16,7 @@ class FakeRepository:
+         return {
+             "id": 11,
+             **reading,
+-            "created_at": datetime.now(UTC).isoformat(),
++            "created_at": datetime.now(timezone.utc).isoformat(),
+         }
+ 
+     def save_weather_data(self, weather: dict[str, Any]) -> dict[str, Any]:
+diff --git a/backend/tests/test_readings_api.py b/backend/tests/test_readings_api.py
+index f31de5c..6e65456 100644
+--- a/backend/tests/test_readings_api.py
++++ b/backend/tests/test_readings_api.py
+@@ -1,4 +1,4 @@
+-from datetime import UTC, datetime
++from datetime import datetime, timezone
+ from typing import Any
+ 
+ from fastapi.testclient import TestClient
+@@ -15,7 +15,7 @@ class FakeMonitoringRepository:
+         record = {
+             "id": len(self.records) + 1,
+             **reading,
+-            "created_at": datetime.now(UTC).isoformat(),
++            "created_at": datetime.now(timezone.utc).isoformat(),
+         }
+         self.records.append(record)
+         return record
+diff --git a/dashboard/services/demo_data.py b/dashboard/services/demo_data.py
+index d440c3e..fe3ea1a 100644
+--- a/dashboard/services/demo_data.py
++++ b/dashboard/services/demo_data.py
+@@ -1,4 +1,4 @@
+-from datetime import UTC, datetime, timedelta
++from datetime import datetime, timedelta, timezone
+ 
+ import numpy as np
+ import pandas as pd
+@@ -104,7 +104,7 @@ def create_demo_alerts(history: pd.DataFrame) -> pd.DataFrame:
+ 
+ 
+ def create_demo_reports() -> list[dict[str, object]]:
+-    now = datetime.now(UTC)
++    now = datetime.now(timezone.utc)
+     return [
+         {
+             "created_at": now,

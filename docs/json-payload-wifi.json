@@ -1,0 +1,22 @@
+{
+  "_description": "Example JSON bodies the ESP32 (esp32_water_soil_sensor/esp32_water_soil_sensor.ino) POSTs to the Backend's HTTP endpoint. This is the sketch's primary transport. See implementation-rules-wifi.md for setup details.",
+  "http_request_reference": {
+    "method": "POST",
+    "url": "http://<backend PC's local IP>:8000/api/readings/serial?device_id=ESP32_WIFI_01",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  },
+  "examples": {
+    "alert_hardware_or_flood": { "type": "alert_hardware_or_flood", "water_level": 3999, "soil_moisture": 30, "led_color": "RED", "timestamp_ms": 111 },
+    "alert_critical_dry_no_water": { "type": "alert_critical_dry_no_water", "water_level": 100, "soil_moisture": 3000, "led_color": "PURPLE", "timestamp_ms": 222 },
+    "warning_dry": { "type": "warning_dry", "water_level": 1600, "soil_moisture": 3000, "led_color": "YELLOW", "timestamp_ms": 333 },
+    "warning_dry_medium_water": { "type": "warning_dry_medium_water", "water_level": 800, "soil_moisture": 3000, "led_color": "ORANGE", "timestamp_ms": 444 },
+    "warning_low_water_wet_soil": { "type": "warning_low_water_wet_soil", "water_level": 100, "soil_moisture": 1000, "led_color": "PINK", "timestamp_ms": 555 },
+    "warning_low_water": { "type": "warning_low_water", "water_level": 100, "soil_moisture": 2000, "led_color": "BLUE", "timestamp_ms": 666 },
+    "data_wet": { "type": "data_wet", "water_level": 1600, "soil_moisture": 1000, "led_color": "WHITE", "timestamp_ms": 777 },
+    "data_ideal": { "type": "data_ideal", "water_level": 1600, "soil_moisture": 1700, "led_color": "GREEN", "timestamp_ms": 888 },
+    "data_wet_medium_water": { "type": "data_wet_medium_water", "water_level": 800, "soil_moisture": 1000, "led_color": "LIGHT_BLUE", "timestamp_ms": 999 },
+    "data_medium": { "type": "data_medium", "water_level": 800, "soil_moisture": 1700, "led_color": "CYAN", "timestamp_ms": 1010 }
+  }
+}

@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,6 +13,12 @@ class Settings(BaseSettings):
     app_name: str = "Drought Monitoring API"
     app_version: str = "0.1.0"
     debug: bool = False
+
+    storage_backend: Literal["memory", "supabase"] = "memory"
+    memory_history_limit: int = 10000
+
+    supabase_url: str = ""
+    supabase_service_key: SecretStr = SecretStr("")
 
     farm_latitude: float = 21.0278
     farm_longitude: float = 105.8342

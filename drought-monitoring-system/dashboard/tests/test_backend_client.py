@@ -1,6 +1,8 @@
+import httpx
 import pandas as pd
 
 from services.backend_client import (
+    BackendClient,
     _build_live_alerts,
     _merge_weather_into_history,
     _normalize_assessment,
@@ -29,7 +31,7 @@ def test_normalizes_saved_gemini_assessment() -> None:
     assert report["analysis_source"] == "gemini-2.5-flash-lite"
 
 
-def test_merges_supabase_weather_and_builds_device_alert() -> None:
+def test_merges_live_weather_and_builds_device_alert() -> None:
     history = pd.DataFrame(
         {
             "id": [1],
@@ -58,3 +60,32 @@ def test_merges_supabase_weather_and_builds_device_alert() -> None:
     assert enriched.iloc[0]["humidity"] == 38
     assert alerts.iloc[0]["risk_level"] == "critical"
     assert alerts.iloc[0]["status"] == "Not sent"
+
+
+def test_ngrok_client_sends_chat_with_selected_assessment() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["ngrok-skip-browser-warning"] == "true"
+        assert request.url.path == "/api/drought/chat"
+        payload = __import__("json").loads(request.content)
+        assert payload["assessment_id"] == 33
+        assert payload["question"] == "Explain the forecast"
+        return httpx.Response(
+            200,
+            json={
+                "answer": "Low rainfall and dry soil drive the saved risk.",
+                "assessment_id": 33,
+            },
+        )
+
+    client = BackendClient(
+        base_url="https://test.ngrok-free.app",
+        transport=httpx.MockTransport(handler),
+    )
+    response = client.ask_forecast(
+        question="Explain the forecast",
+        assessment_id=33,
+        history=[],
+    )
+
+    assert response["assessment_id"] == 33
+    assert "Low rainfall" in response["answer"]

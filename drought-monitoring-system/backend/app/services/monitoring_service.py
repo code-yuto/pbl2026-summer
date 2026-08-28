@@ -50,6 +50,20 @@ class MonitoringService:
         self,
         request: DroughtAnalysisRequest,
     ) -> DroughtAnalysisResponse:
+        return await self._analyze_and_store(request)
+
+    async def analyze_existing_and_store(
+        self,
+        request: DroughtAnalysisRequest,
+        sensor_reading_id: int,
+    ) -> DroughtAnalysisResponse:
+        return await self._analyze_and_store(request, sensor_reading_id)
+
+    async def _analyze_and_store(
+        self,
+        request: DroughtAnalysisRequest,
+        sensor_reading_id: int | None = None,
+    ) -> DroughtAnalysisResponse:
         latitude = (
             request.latitude
             if request.latitude is not None
@@ -79,18 +93,28 @@ class MonitoringService:
         gemini = await self.gemini_service.analyze(sensor, weather, risk)
 
         try:
-            saved_sensor = await run_in_threadpool(
-                self.repository.save_reading,
-                {
-                    **sensor.model_dump(),
-                    "temperature": weather.temperature_c,
-                    "humidity": weather.humidity_percent,
-                    "risk_level": risk.level,
-                    "llm_explanation": gemini.summary,
-                    "recommendation": "\n".join(gemini.recommendations),
-                    "alert_sent": False,
-                },
-            )
+            analysis_fields = {
+                "temperature": weather.temperature_c,
+                "humidity": weather.humidity_percent,
+                "risk_level": risk.level,
+                "llm_explanation": gemini.summary,
+                "recommendation": "\n".join(gemini.recommendations),
+            }
+            if sensor_reading_id is None:
+                saved_sensor = await run_in_threadpool(
+                    self.repository.save_reading,
+                    {
+                        **sensor.model_dump(),
+                        **analysis_fields,
+                        "alert_sent": False,
+                    },
+                )
+            else:
+                saved_sensor = await run_in_threadpool(
+                    self.repository.update_reading_analysis,
+                    sensor_reading_id,
+                    analysis_fields,
+                )
             saved_weather = await run_in_threadpool(
                 self.repository.save_weather_data,
                 {
@@ -118,7 +142,7 @@ class MonitoringService:
             )
         except Exception as error:
             raise MonitoringPersistenceError(
-                "Unable to store the drought assessment"
+                "Unable to store the drought assessment in the current session"
             ) from error
 
         return DroughtAnalysisResponse(

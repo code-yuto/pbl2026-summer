@@ -21,7 +21,7 @@ async def _repository_call(method, *args) -> Any:
         logger.exception("Unable to retrieve dashboard data")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Unable to retrieve dashboard data from the backend",
+            detail="Unable to retrieve live dashboard data",
         ) from error
 
 
@@ -30,7 +30,7 @@ async def get_dashboard_readings(
     limit: int = Query(default=720, ge=1, le=5000),
     repository: MonitoringRepository = Depends(get_monitoring_repository),
 ) -> list[dict[str, Any]]:
-    """Return full sensor rows, including raw ESP32 fields."""
+    """Return current-session sensor rows, including raw ESP32 fields."""
 
     return await _repository_call(
         repository.get_reading_history,

@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from app.models.sensor_models import SensorReadingCreate
+from app.models.report_models import ForecastChatTurn
 from app.models.weather_models import WeatherSnapshot
 from app.services.gemini_service import (
     GeminiConfigurationError,
@@ -117,3 +118,60 @@ def test_gemini_requires_an_api_key() -> None:
                 ),
             )
         )
+
+
+def test_gemini_chat_uses_live_forecast_context() -> None:
+    async def run_test() -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads((await request.aread()).decode())
+            prompt = body["contents"][0]["parts"][0]["text"]
+            assert "LIVE_CONTEXT" in prompt
+            assert '"soil_moisture": 18.0' in prompt
+            assert '"forecast_precipitation_7d_mm": 2.0' in prompt
+            assert "Why is the drought risk critical?" in prompt
+            return httpx.Response(
+                200,
+                json={
+                    "candidates": [
+                        {
+                            "content": {
+                                "parts": [
+                                    {
+                                        "text": (
+                                            "The saved risk is critical because "
+                                            "the soil is dry and little rain is forecast."
+                                        )
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+            )
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+            service = GeminiService(
+                api_key="test-key",
+                model="gemini-2.5-flash-lite",
+                base_url="https://gemini.test/v1beta",
+                client=client,
+            )
+            answer = await service.answer_forecast_question(
+                question="Why is the drought risk critical?",
+                context={
+                    "sensor": {"soil_moisture": 18.0},
+                    "weather": {"forecast_precipitation_7d_mm": 2.0},
+                    "assessment": {"risk_level": "critical"},
+                },
+                history=[
+                    ForecastChatTurn(
+                        role="user",
+                        content="Explain the rain forecast.",
+                    )
+                ],
+            )
+
+        assert "saved risk is critical" in answer
+
+    asyncio.run(run_test())

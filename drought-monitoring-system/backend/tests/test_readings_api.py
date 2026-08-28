@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -15,7 +15,7 @@ class FakeMonitoringRepository:
         record = {
             "id": len(self.records) + 1,
             **reading,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
         self.records.append(record)
         return record

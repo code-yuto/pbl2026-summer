@@ -46,7 +46,7 @@ async def create_serial_reading(
     )
     selected_device_id = (device_id or settings.serial_device_id).strip()
     raw_payload = payload.model_dump(by_alias=True)
-    database_record = {
+    sensor_record = {
         "device_id": selected_device_id,
         "message_type": payload.message_type,
         "sensor_transport": "usb_serial",
@@ -64,7 +64,7 @@ async def create_serial_reading(
     try:
         saved_record = await run_in_threadpool(
             repository.save_reading,
-            database_record,
+            sensor_record,
         )
     except Exception as error:
         logger.exception("Unable to save serial sensor reading")
@@ -98,7 +98,7 @@ async def create_reading(
         thresholds=thresholds,
     )
 
-    database_record = {
+    sensor_record = {
         **reading.model_dump(),
         "risk_level": risk_level,
         "alert_sent": False,
@@ -107,7 +107,7 @@ async def create_reading(
     try:
         saved_record = await run_in_threadpool(
             repository.save_reading,
-            database_record,
+            sensor_record,
         )
     except Exception as error:
         logger.exception("Unable to save sensor reading")

@@ -11,14 +11,16 @@ from components.status_cards import (
 from services.backend_client import load_dashboard_snapshot
 
 
-snapshot = load_dashboard_snapshot()
+snapshot = load_dashboard_snapshot(
+    base_url=st.session_state.get("backend_url")
+)
 alerts = snapshot.alerts.copy()
 
 render_page_header(
     title="Alert center",
     subtitle=(
-        "Review rule-based warnings, notification delivery and recent field "
-        "events without waiting for the LLM response path."
+        "Review current-session rule-based warnings and recent field events "
+        "without waiting for the LLM response path."
     ),
     source=snapshot.source,
     eyebrow="Operational response",

@@ -13,7 +13,9 @@ from components.status_cards import render_page_header, render_section_header
 from services.backend_client import load_dashboard_snapshot
 
 
-snapshot = load_dashboard_snapshot()
+snapshot = load_dashboard_snapshot(
+    base_url=st.session_state.get("backend_url")
+)
 history = snapshot.history.copy()
 
 render_page_header(
@@ -25,6 +27,13 @@ render_page_header(
     source=snapshot.source,
     eyebrow="Trend analysis",
 )
+
+if history.empty:
+    st.warning(
+        "Historical charts will appear after the USB serial bridge sends live "
+        "sensor readings. In-memory history resets when FastAPI restarts."
+    )
+    st.stop()
 
 control_columns = st.columns([1, 1, 1.5], gap="large")
 with control_columns[0]:

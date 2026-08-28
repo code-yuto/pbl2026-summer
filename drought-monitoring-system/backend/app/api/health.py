@@ -13,4 +13,5 @@ def health_check() -> dict[str, str]:
         "status": "healthy",
         "service": settings.app_name,
         "version": settings.app_version,
+        "storage": settings.storage_backend,
     }

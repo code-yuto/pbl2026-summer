@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.sensor_models import RiskLevel, SensorReadingCreate
 from app.models.weather_models import WeatherSnapshot
@@ -34,3 +35,30 @@ class DroughtAnalysisResponse(BaseModel):
     weather: WeatherSnapshot
     risk: DroughtRiskResult
     gemini: GeminiDroughtAnalysis
+
+
+class ForecastChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class ForecastChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=600)
+    assessment_id: int | None = Field(default=None, ge=1)
+    history: list[ForecastChatTurn] = Field(default_factory=list, max_length=8)
+
+    @field_validator("question")
+    @classmethod
+    def clean_question(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("question cannot be empty")
+        return cleaned
+
+
+class ForecastChatResponse(BaseModel):
+    answer: str = Field(min_length=1, max_length=5000)
+    assessment_id: int
+    model: str
+    context_created_at: datetime | None = None
+    data_sources: list[str]

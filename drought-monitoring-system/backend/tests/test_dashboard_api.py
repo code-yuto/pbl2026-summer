@@ -20,7 +20,7 @@ class FakeDashboardRepository:
         return [{"id": 3, "summary": "High drought risk."}]
 
 
-def test_dashboard_supabase_feeds() -> None:
+def test_dashboard_live_session_feeds() -> None:
     app.dependency_overrides[get_monitoring_repository] = (
         FakeDashboardRepository
     )

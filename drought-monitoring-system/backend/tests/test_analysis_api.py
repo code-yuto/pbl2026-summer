@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -12,11 +12,32 @@ from app.services.weather_service import get_weather_service
 
 
 class FakeRepository:
+    def get_latest_reading(self) -> dict[str, Any]:
+        return {
+            "id": 11,
+            "device_id": "ESP32_SERIAL_01",
+            "soil_moisture": 18,
+            "water_level": 4,
+        }
+
     def save_reading(self, reading: dict[str, Any]) -> dict[str, Any]:
         return {
             "id": 11,
             **reading,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+
+    def update_reading_analysis(
+        self,
+        reading_id: int,
+        updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "id": reading_id,
+            "device_id": "ESP32_SERIAL_01",
+            "soil_moisture": 18,
+            "water_level": 4,
+            **updates,
         }
 
     def save_weather_data(self, weather: dict[str, Any]) -> dict[str, Any]:
@@ -92,3 +113,22 @@ def test_complete_drought_analysis_pipeline() -> None:
     assert body["risk"]["level"] == "critical"
     assert body["data_sources"]["soil_moisture"] == "physical sensor"
     assert body["data_sources"]["temperature"] == "Open-Meteo API"
+
+
+def test_analyzes_latest_supabase_sensor_without_duplicate_reading() -> None:
+    app.dependency_overrides[get_monitoring_repository] = FakeRepository
+    app.dependency_overrides[get_weather_service] = FakeWeatherService
+    app.dependency_overrides[get_gemini_service] = FakeGeminiService
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/api/drought/analyze/latest")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["sensor_reading_id"] == 11
+    assert body["weather_id"] == 22
+    assert body["assessment_id"] == 33
+    assert body["risk"]["level"] == "critical"

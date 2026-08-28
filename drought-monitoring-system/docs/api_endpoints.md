@@ -1,4 +1,4 @@
-# API endpoints
+# Live API endpoints
 
 ## Health
 
@@ -6,78 +6,24 @@
 GET /health
 ```
 
-Checks whether FastAPI is running.
+Returns the service status and active storage mode. Database-free operation
+returns `"storage": "memory"`.
 
-## Current and forecast weather
+## Current Open-Meteo weather
 
 ```http
 GET /api/weather?latitude=21.0278&longitude=105.8342
 ```
 
-Returns current temperature, humidity and precipitation, previous seven-day
-precipitation, three-day and seven-day forecast precipitation, and FAO ET0
-evapotranspiration from Open-Meteo. Coordinates are optional. When they are
-omitted, the backend uses `FARM_LATITUDE` and `FARM_LONGITUDE`.
+Fetches weather directly from Open-Meteo. Coordinates are optional and default
+to `FARM_LATITUDE` and `FARM_LONGITUDE`.
 
-## Complete drought assessment
-
-```http
-POST /api/drought/analyze
-Content-Type: application/json
-```
-
-```json
-{
-  "device_id": "SIMULATED_01",
-  "soil_moisture": 18,
-  "water_level": 4,
-  "latitude": 21.0278,
-  "longitude": 105.8342
-}
-```
-
-Processing order:
-
-1. Validate the physical sensor data.
-2. Fetch Open-Meteo data.
-3. Calculate a deterministic 0-100 drought-risk score.
-4. Ask Gemini to explain the fixed risk result.
-5. Store linked sensor, weather and assessment records in Supabase.
-
-This endpoint requires the three Supabase migrations and `GEMINI_API_KEY`.
-
-## Sensor-only endpoints
-
-```http
-POST /api/readings
-GET /api/readings/latest
-GET /api/readings/history?limit=100
-```
-
-These endpoints use physical sensor data and fixed thresholds without calling
-Open-Meteo or Gemini.
-
-## Supabase dashboard feeds
-
-```http
-GET /api/dashboard/readings?limit=720
-GET /api/dashboard/weather?limit=100
-GET /api/dashboard/assessments?limit=100
-```
-
-These endpoints provide the Streamlit dashboard with complete Supabase sensor
-rows, weather snapshots, deterministic drought scores, and saved Gemini
-explanations. The sensor endpoint includes the original ADC values, device
-status, LED colour, calibrated percentages and server reception time.
-
-## ESP32 USB Serial payload
+## Receive ESP32 USB Serial data
 
 ```http
 POST /api/readings/serial
 Content-Type: application/json
 ```
-
-The endpoint accepts the exact object printed by the ESP32:
 
 ```json
 {
@@ -89,8 +35,43 @@ The endpoint accepts the exact object printed by the ESP32:
 }
 ```
 
-The incoming sensor values are raw ESP32 ADC readings from 0 to 4095. The
-backend preserves the original payload and calculates separate 0-100 values
-using the calibration settings in `.env`. `timestamp_ms` is device uptime and
-is not converted into a calendar time. Supabase `created_at` records the actual
-server reception time.
+The endpoint preserves raw 0-4095 ADC values, calculates calibrated percentages
+and keeps the reading in FastAPI memory.
+
+## Analyze the latest live reading
+
+```http
+POST /api/drought/analyze/latest
+```
+
+Uses the newest sensor reading, fetches Open-Meteo, calculates drought risk,
+calls Gemini and links all three results in the current FastAPI session.
+
+## Chat about a forecast
+
+```http
+POST /api/drought/chat
+Content-Type: application/json
+```
+
+```json
+{
+  "question": "Why is this risk level high?",
+  "assessment_id": 1,
+  "history": []
+}
+```
+
+Gemini receives the selected ESP32 reading, Open-Meteo snapshot and fixed risk
+assessment. If `assessment_id` is omitted, the latest assessment is used.
+
+## Dashboard session feeds
+
+```http
+GET /api/dashboard/readings?limit=720
+GET /api/dashboard/weather?limit=100
+GET /api/dashboard/assessments?limit=100
+```
+
+These endpoints return only data collected during the current FastAPI process.
+They return empty arrays before data arrives and after FastAPI restarts.

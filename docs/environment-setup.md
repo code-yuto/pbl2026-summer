@@ -6,30 +6,24 @@ to run the **whole system end-to-end**: ESP32 sensor -> USB Serial bridge
 
 **Short answer to "is `pip install -r requirements.txt` enough?": no.**
 That only installs Python packages for one of the two Python projects.
-You also need: a second repository (the backend lives outside this repo),
-API keys in a `.env` file, the Arduino IDE with ESP32 board support to
-flash the microcontroller, and two Python processes running at the same
-time (backend + serial bridge). All steps are below.
+You also need: API keys in a `.env` file, the Arduino IDE with ESP32
+board support to flash the microcontroller, and two Python processes
+running at the same time (backend + serial bridge). All steps are below.
 
 ## 0. Repository layout
 
-This repo (`pbl2026-summer`) only contains the **Edge Team's** code:
-the ESP32 sketch and the docs describing the JSON contract. It does not
-contain a working backend -- `python-reference-example/` is a
-non-authoritative stand-in, useful only to see the contract in action
-without the real backend.
-
-The real backend + dashboard live in a **separate** repository,
-[drought-monitoring-system](https://github.com/ferhadedika/drought-monitoring-system),
-which is gitignored here (see `.gitignore`) and must be cloned
-separately, next to this repo:
+As of commit `ba6d922` ("Integrate drought monitoring system"), the
+backend + dashboard are vendored directly inside this repo under
+`drought-monitoring-system/` -- there is nothing else to clone.
+`python-reference-example/` is a separate, non-authoritative stand-in,
+useful only to see the JSON contract in action without the real
+backend.
 
 ```text
-some-folder/
-  pbl2026-summer/              <- this repo (Edge Team)
-    esp32_water_soil_sensor/
-    docs/
-  drought-monitoring-system/    <- separate repo (Backend Team), clone this yourself
+pbl2026-summer/                 <- this repo, clone only this
+  esp32_water_soil_sensor/
+  docs/
+  drought-monitoring-system/     <- backend + dashboard, already inside
     backend/
     dashboard/
     scripts/
@@ -37,8 +31,13 @@ some-folder/
 
 ```bash
 git clone <this-repo-url> pbl2026-summer
-git clone https://github.com/ferhadedika/drought-monitoring-system
 ```
+
+If you previously cloned `drought-monitoring-system` as a separate
+sibling folder (following an older version of this guide), delete that
+standalone clone -- it is a duplicate of the one already inside
+`pbl2026-summer/`. Always run the commands below from
+`pbl2026-summer/drought-monitoring-system`.
 
 ## 1. Flash the ESP32 (Edge side)
 

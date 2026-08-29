@@ -94,7 +94,9 @@ def test_accepts_exact_esp32_serial_payload() -> None:
     assert body["soil_moisture_raw"] == 1800
     assert body["device_timestamp_ms"] == 123456
     assert body["water_level"] == 34.13
-    assert body["soil_moisture"] == 76.92
+    # Soil raw 1800 is above the calibrated SOIL_SENSOR_WET_RAW (600),
+    # so it clamps to fully wet -- matches the current .env calibration.
+    assert body["soil_moisture"] == 100.0
     assert body["device_alert"] is False
     assert body["raw_payload"]["type"] == "data"
 

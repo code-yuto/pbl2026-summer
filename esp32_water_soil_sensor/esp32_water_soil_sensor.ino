@@ -13,10 +13,10 @@ const int WATER_MAX_ANOMALY   = 3500; // Nước quá cao / Ngập lụt
 const int WATER_HIGH_THRESH    = 1500; // Nước đầy
 const int WATER_LOW_THRESH     = 300;  // Nước thấp / Cạn
 
-// Cảm biến độ ẩm đất (Cảm biến điện dung: Giá trị CÀNG THẤP = CÀNG ẨM)
+// Cảm biến độ ẩm đất (Đã hiệu chỉnh theo cảm biến thực tế: Giá trị CÀNG CAO = CÀNG ẨM)
 const int MOISTURE_DISCONNECT  = 50;   // Bất thường: Mất kết nối dây
-const int MOISTURE_WET_THRESH  = 1500; // Đất ướt / Ẩm cao
-const int MOISTURE_DRY_THRESH  = 2800; // Đất khô / Cần tưới
+const int MOISTURE_DRY_THRESH  = 150;  // Đất khô / Cần tưới
+const int MOISTURE_WET_THRESH  = 600;  // Đất ướt / Ẩm cao
 const int MOISTURE_SHORT_CIR   = 4000; // Bất thường: Chập mạch
 
 int waterValue = 0;
@@ -73,12 +73,12 @@ void loop() {
   }
   // 2. NƯỚC ĐẦY (water >= 1500)
   else if (waterValue >= WATER_HIGH_THRESH) {
-    if (moistureValue > MOISTURE_DRY_THRESH) {
+    if (moistureValue < MOISTURE_DRY_THRESH) {
       setLedColor(255, 255, 0); // Đỏ + Xanh lá = Màu Vàng
       Serial.println(">>> TRẠNG THÁI: Nước đầy - Đất khô (Cần tưới) | LED: VÀNG");
       printReading("warning_dry", waterValue, moistureValue, "YELLOW");
     } 
-    else if (moistureValue < MOISTURE_WET_THRESH) {
+    else if (moistureValue > MOISTURE_WET_THRESH) {
       setLedColor(255, 255, 255); // Đỏ + Xanh lá + Xanh dương = Màu Trắng
       Serial.println(">>> TRẠNG THÁI: Nước đầy - Đất rất ướt | LED: TRẮNG");
       printReading("data_wet", waterValue, moistureValue, "WHITE");
@@ -91,12 +91,12 @@ void loop() {
   }
   // 3. NƯỚC VỪA (300 <= water < 1500)
   else if (waterValue >= WATER_LOW_THRESH) {
-    if (moistureValue > MOISTURE_DRY_THRESH) {
+    if (moistureValue < MOISTURE_DRY_THRESH) {
       setLedColor(255, 80, 0); // Màu Cam
       Serial.println(">>> TRẠNG THÁI: Nước trung bình - Đất khô | LED: CAM");
       printReading("warning_dry_medium_water", waterValue, moistureValue, "ORANGE");
     } 
-    else if (moistureValue < MOISTURE_WET_THRESH) {
+    else if (moistureValue > MOISTURE_WET_THRESH) {
       setLedColor(0, 100, 255); // Màu Lam nhạt
       Serial.println(">>> TRẠNG THÁI: Nước trung bình - Đất ướt | LED: LAM NHẠT");
       printReading("data_wet_medium_water", waterValue, moistureValue, "LIGHT_BLUE");
@@ -109,12 +109,12 @@ void loop() {
   }
   // 4. NƯỚC CẠN (water < 300)
   else {
-    if (moistureValue > MOISTURE_DRY_THRESH) {
+    if (moistureValue < MOISTURE_DRY_THRESH) {
       setLedColor(255, 0, 255); // Đỏ + Xanh dương = Màu Tím
       Serial.println(">>> TRẠNG THÁI: [CỰC KỲ NGUY HIỂM] Hết nước & Đất khô! | LED: TÍM");
       printReading("alert_critical_dry_no_water", waterValue, moistureValue, "PURPLE");
     } 
-    else if (moistureValue < MOISTURE_WET_THRESH) {
+    else if (moistureValue > MOISTURE_WET_THRESH) {
       setLedColor(255, 105, 180); // Màu Hồng
       Serial.println(">>> TRẠNG THÁI: Cạn nước trong bình - Đất ướt | LED: HỒNG");
       printReading("warning_low_water_wet_soil", waterValue, moistureValue, "PINK");

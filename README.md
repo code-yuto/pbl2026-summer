@@ -30,10 +30,8 @@ Serial sidesteps all of that: the ESP32 just stays plugged into the PC.
 
 ## 2. Run the Backend
 
-The real Backend lives in a separate repo,
-[drought-monitoring-system](https://github.com/ferhadedika/drought-monitoring-system)
-(clone it alongside this repo -- it's gitignored here since it's not part
-of this repo's history).
+The real Backend lives inside this repo at `drought-monitoring-system/`
+(vendored since commit `ba6d922`) -- there is no separate repo to clone.
 
 1. Copy `.env.example` to `.env`. Supabase is not used in this local
    setup (sensor readings are stored as JSON Lines files under `data/`

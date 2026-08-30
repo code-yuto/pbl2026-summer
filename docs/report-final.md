@@ -257,3 +257,124 @@ We thank everyone who contributed to this project for their support.
 ### 参考文献
 
 参考文献は原文(英語)の書誌情報をそのまま参照のこと(上記 References 参照)。
+
+---
+
+# Bản dịch tiếng Việt
+
+## Thiết kế Hệ thống Giám sát Tưới tiêu Thông minh Sử dụng Cảm biến Độ ẩm Đất / Mực nước và LLM
+
+**Đội Phần cứng · Đội Edge · Đội Backend**
+**Dự án:** pbl2026-summer
+
+### Tóm tắt
+
+Dự án này (pbl2026-summer) liên tục giám sát điều kiện đồng ruộng bằng cảm biến độ ẩm đất và mực nước, đồng thời xây dựng một hệ thống giám sát tưới tiêu thông minh kết hợp giữa kiểm tra ngưỡng tức thời trên vi điều khiển ở lớp edge và phát hiện bất thường theo ngữ cảnh ở lớp backend, nơi một LLM (mô hình ngôn ngữ lớn) suy luận trên dữ liệu cảm biến cùng với thông tin dự báo thời tiết. Hệ thống được chia thành ba lớp — phần cứng, edge và backend — và mỗi đội chỉ phụ thuộc vào một điểm kết nối duy nhất là "Gửi dữ liệu (JSON)", cho phép ba đội phát triển hoàn toàn độc lập và song song với nhau. Khi vượt ngưỡng, bước LLM sẽ bị bỏ qua và cảnh báo được gửi ngay lập tức; nếu không, dữ liệu cảm biến bình thường sẽ được kết hợp với dự báo thời tiết và chuyển cho LLM, LLM sẽ phát hiện các mâu thuẫn theo ngữ cảnh như lỗi cảm biến hoặc rò rỉ nước, đồng thời đề xuất có cần tưới hay không và tưới bao nhiêu. Kết quả cuối cùng được gửi đến người dùng qua ứng dụng, LINE hoặc Discord. Bên cạnh kênh truyền từ xa này, thiết bị edge còn điều khiển một đèn LED RGB gắn trên bo mạch, có màu được xác định bởi cùng logic ngưỡng đó, để bất kỳ ai đứng gần thiết bị đều có thể đọc được tình trạng hiện tại của đồng ruộng ngay khi thiết bị được cấp nguồn, mà không cần kết nối mạng hay ứng dụng.
+
+**Từ khóa:** IoT, nông nghiệp thông minh, điện toán biên, LLM, phát hiện bất thường
+
+### 1. Giới thiệu
+
+Trong những năm gần đây, việc tích hợp Internet vạn vật (IoT) vào nông nghiệp đã thu hút sự chú ý ngày càng tăng như một hướng tiếp cận đầy hứa hẹn nhằm cải thiện hiệu quả sử dụng nước, giảm sự can thiệp thủ công và cho phép quản lý tưới tiêu dựa trên dữ liệu. Các hệ thống tưới tiêu thông minh dựa trên IoT có thể liên tục thu thập thông tin ở cấp độ đồng ruộng như độ ẩm đất, điều kiện môi trường và lượng nước sẵn có, cho phép các quyết định tưới tiêu phản ứng theo trạng thái thực tế của môi trường nông nghiệp thay vì chỉ dựa vào lịch trình cố định hoặc quan sát thủ công [1], [2]. Các nghiên cứu gần đây đã chứng minh rằng việc kết hợp cảm biến độ ẩm đất theo thời gian thực với thông tin thời tiết có thể cải thiện hơn nữa việc lập lịch tưới tiêu bằng cách tính đến lượng mưa sắp tới và các điều kiện môi trường đang thay đổi [1], [3]. Ngoài ra, việc tích hợp điện toán biên vào các hệ thống IoT cho phép xử lý dữ liệu đồng ruộng theo thời gian thực gần với thiết bị cảm biến hơn, giảm sự phụ thuộc vào xử lý trên đám mây và hỗ trợ các ứng dụng nông nghiệp phản hồi nhanh hơn [4].
+
+Mặc dù đã có những tiến bộ này, việc tưới tiêu theo lịch trình cố định và kiểm tra bằng mắt truyền thống vẫn còn hạn chế trong khả năng phản ứng nhanh với các điều kiện đồng ruộng biến động. Lịch tưới tiêu cố định có thể dẫn đến việc tiêu thụ nước không cần thiết khi lượng mưa đủ được dự báo, trong khi việc giám sát thủ công có thể làm chậm việc phát hiện các tình trạng bất thường như mực nước quá cao hoặc quá thấp, lỗi cảm biến, hoặc rò rỉ tiềm ẩn. Do đó, các kiến trúc tưới tiêu dựa trên IoT gần đây đã nhấn mạnh vào việc cảm biến liên tục, truyền dữ liệu theo thời gian thực, ra quyết định dựa trên ngưỡng, và cơ chế thông báo tự động để hỗ trợ can thiệp kịp thời [1]. Hơn nữa, các nghiên cứu về dữ liệu cảm biến nông nghiệp đã nhấn mạnh tầm quan trọng của việc phát hiện các mẫu bất thường trong luồng cảm biến thời gian thực, đặc biệt khi cần có giám sát đáng tin cậy cho các hệ thống tự động hoặc bán tự động [5].
+
+Để giải quyết những hạn chế này, dự án này thiết kế và triển khai một hệ thống tưới tiêu thông minh dựa trên IoT có khả năng liên tục giám sát độ ẩm đất và mực nước theo thời gian thực, phát hiện các tình trạng bất thường, và báo cáo ngay lập tức các bất thường tiềm ẩn. Không chỉ dừng lại ở việc điều khiển dựa trên ngưỡng đơn giản, hệ thống còn tích hợp thông tin bên ngoài, đặc biệt là dự báo thời tiết, vào quá trình ra quyết định tưới tiêu. Cách tiếp cận này dựa theo các nghiên cứu gần đây cho thấy rằng việc tích hợp quan sát đồng ruộng theo thời gian thực với dự báo thời tiết có thể hỗ trợ lập lịch tưới tiêu thích ứng hơn và cải thiện hiệu quả quản lý nước [2], [3].
+
+Từ góc độ kỹ thuật hệ thống, quá trình phát triển được chia thành ba đội: phần cứng, edge và backend. Lớp phần cứng chịu trách nhiệm cảm biến và thu thập dữ liệu môi trường vật lý; lớp edge thực hiện xử lý dữ liệu cục bộ và ra quyết định; và lớp backend quản lý việc lưu trữ dữ liệu, trực quan hóa, thông báo và các dịch vụ cấp hệ thống. Cấu trúc phân lớp này phù hợp với các kiến trúc tưới tiêu thông minh dựa trên IoT gần đây, vốn tách biệt thiết bị hiện trường, lớp tính toán, và dịch vụ đám mây hoặc bảng điều khiển để tạo điều kiện cho việc giám sát theo thời gian thực và phát triển hệ thống có khả năng mở rộng [1], [4]. Để cho phép phát triển song song, các giao diện giữa ba đội được thiết kế tối giản và xác định rõ ràng một cách có chủ đích, cho phép mỗi đội phát triển và kiểm thử các thành phần của mình một cách độc lập trong khi vẫn duy trì khả năng tương tác của toàn hệ thống.
+
+Báo cáo này trình bày kiến trúc tổng thể của hệ thống ở Chương 2, tiếp theo là sơ đồ hoạt động và luồng xử lý ở Chương 3. Chương 4 thảo luận về cơ sở của thiết kế giao diện giữa các đội và giải thích cách các giao diện được đề xuất hỗ trợ tính mô-đun và phát triển song song. Cuối cùng, Chương 5 tóm tắt những đóng góp chính của dự án và thảo luận về các hướng phát triển tiềm năng trong tương lai, bao gồm phát hiện bất thường tiên tiến hơn, tưới tiêu dự đoán, và tích hợp sâu hơn giữa trí tuệ biên và dữ liệu môi trường bên ngoài.
+
+Một động lực khác của thiết kế này liên quan đến khả năng sử dụng. Nhiều hệ thống giám sát tưới tiêu và mực nước dựa trên IoT hiện có chỉ hiển thị các giá trị cảm biến thô và biểu đồ theo thời gian, đòi hỏi kiến thức chuyên môn để diễn giải chính xác; một người dùng không chuyên như người vận hành hiện trường hoặc nông dân có thể khó phán đoán, chỉ từ các con số, liệu một chỉ số nhất định có thực sự là vấn đề hay không và cần hành động gì, nếu có. Để thu hẹp khoảng cách này, backend trong dự án này chủ động tách biệt việc ra quyết định về bất thường khỏi phần giải thích của nó: bản thân mức độ rủi ro luôn được tính toán bằng logic ngưỡng tất định, có thể kiểm chứng, trong khi LLM chỉ được sử dụng sau đó, để chuyển quyết định đó cùng bối cảnh cảm biến/thời tiết xung quanh thành một bản tóm tắt và khuyến nghị ngắn gọn, dễ hiểu. Theo cách này, LLM không thay thế logic ra quyết định mà đóng vai trò như một lớp "dễ đọc" giúp đầu ra của hệ thống trở nên hành động được ngay đối với người dùng không chuyên.
+
+Một tính năng khả dụng bổ sung giải quyết một khoảng cách khác: kênh thông báo từ xa ở trên giả định rằng người dùng đang kiểm tra điện thoại hoặc bảng điều khiển, nhưng một người đi ngang qua thiết bị hiện trường không có cách dễ dàng nào để biết trạng thái của nó nếu không làm như vậy. Để giải quyết điều này, thiết bị edge cũng hiển thị trạng thái của nó trực tiếp và cục bộ thông qua một đèn LED RGB được nối với vi điều khiển. Vì màu của đèn LED được suy ra từ cùng logic ngưỡng dùng để quyết định có cảnh báo hay không, chỉ cần cấp nguồn cho thiết bị là đủ để đọc trạng thái hiện tại của nó tại chỗ — không cần ứng dụng, đăng nhập, hay kết nối mạng, và chỉ báo này vẫn khả dụng ngay cả khi Wi-Fi hoặc backend không thể truy cập được. Mục 2.4 mô tả chi tiết tính năng này và cách ánh xạ màu của nó.
+
+### 2. Kiến trúc hệ thống
+
+Hệ thống bao gồm ba lớp: phần cứng, edge và backend. Hình 1 cho thấy kiến trúc tổng thể của hệ thống.
+
+*Hình 1: Kiến trúc hệ thống — cấu trúc ba lớp và trách nhiệm của từng đội*
+
+#### 2.1 Đội Phần cứng (Cảm biến & Mạch điện)
+
+Các giá trị analog được đọc từ cảm biến độ ẩm đất và cảm biến mực nước lắp đặt tại hiện trường. Đội phần cứng chịu trách nhiệm lựa chọn cảm biến, đi dây và thiết kế nguồn điện, đồng thời truyền các giá trị này xuống vi điều khiển dưới dạng đầu vào analog. Hình 2 cho thấy thiết kế mạch điện, và Hình 3 cho thấy phần cứng đã được lắp ráp dùng trong thí nghiệm.
+
+![Hình 2: Sơ đồ mạch điện của cảm biến và đèn LED RGB](images/circuit-diagram.png)
+
+*Hình 2: Sơ đồ mạch điện cho thấy cách đấu nối cảm biến độ ẩm đất, cảm biến mực nước và đèn LED RGB với vi điều khiển.*
+
+![Hình 3: Ảnh chụp phần cứng thí nghiệm đã lắp ráp](images/hardware-setup.jpg)
+
+*Hình 3: Ảnh chụp bộ thiết lập thí nghiệm thực tế, bao gồm cảm biến, vi điều khiển và đèn LED RGB.*
+
+#### 2.2 Đội Edge (Firmware Arduino)
+
+Firmware trên vi điều khiển tổng hợp các giá trị cảm biến và thực hiện kiểm tra ngưỡng. Nếu một giá trị vượt quá phạm vi bình thường (Bất thường), hệ thống sẽ đi theo "đường dẫn tức thời", gửi cảnh báo ngay lập tức mà không thông qua LLM. Nếu các giá trị nằm trong phạm vi bình thường (Bình thường), dữ liệu cảm biến được đóng gói dưới dạng JSON và gửi đến backend qua HTTP hoặc MQTT.
+
+#### 2.3 Đội Backend (LLM & API)
+
+Backend lấy dữ liệu dự báo từ một API thời tiết bên cạnh dữ liệu JSON nhận được, và chuyển cả hai cho LLM. LLM thực hiện một "kiểm tra ngữ cảnh" để xác minh rằng giá trị cảm biến và thông tin thời tiết có nhất quán với nhau hay không. Nếu chúng mâu thuẫn (Không nhất quán), hệ thống sẽ gắn cờ một bất thường theo ngữ cảnh có thể cho thấy rò rỉ nước hoặc lỗi cảm biến. Nếu chúng nhất quán (Nhất quán), hệ thống sẽ tạo ra một báo cáo bình thường bao gồm nhu cầu tưới tiêu và lượng nước cần tưới. Kết quả cuối cùng được gửi đến người dùng qua ứng dụng, LINE hoặc Discord.
+
+#### 2.4 Chỉ báo trạng thái trên thiết bị (Đèn LED RGB)
+
+Bên cạnh dữ liệu JSON gửi đến backend, firmware của edge còn điều khiển một đèn LED RGB kiểu cathode chung được nối trực tiếp với vi điều khiển. Mục đích của nó là giúp đọc được trạng thái đồng ruộng tại chỗ: vì màu của đèn LED được tính toán từ chính logic ngưỡng dùng để quyết định có cảnh báo hay không, một người ở gần thiết bị chỉ cần nhìn vào nó — ngay khi thiết bị được cấp nguồn, trạng thái hiện tại sẽ hiển thị ngay lập tức, không phụ thuộc vào Wi-Fi, backend, hay ứng dụng điện thoại. Điều này khiến đèn LED hữu ích cả như một cách kiểm tra nhanh trong các lần thăm đồng định kỳ, lẫn như một chỉ báo dự phòng nếu kết nối mạng hoặc backend tạm thời không khả dụng.
+
+Màu sắc được suy ra từ cùng hai chỉ số đo — mực nước và độ ẩm đất — nhưng được giới hạn có chủ đích chỉ còn bốn màu thay vì một màu cho mỗi tổ hợp, để có thể đọc chính xác chỉ bằng một cái nhìn ngay cả dưới ánh nắng ngoài trời gay gắt, nơi các tông màu gần nhau (ví dụ: xanh lơ và xanh nhạt) khó phân biệt. Bốn màu LED này cũng được chọn để tương ứng với bốn mức phân loại rủi ro (`normal` / `medium` / `high` / `critical`) mà backend đã tính toán sẵn và hiển thị trên bảng điều khiển, để chỉ báo LED cục bộ, ngoại tuyến và chỉ báo trên bảng điều khiển từ xa "nói cùng một ngôn ngữ":
+
+| Màu LED | Phân loại | Tương ứng với | Điều kiện |
+| --- | --- | --- | --- |
+| Đỏ | Lỗi phần cứng | (không có tương ứng trên bảng điều khiển — lỗi ở cấp thiết bị, không phải mức rủi ro) | Cảm biến bị ngắt kết nối/chập mạch, hoặc mực nước cao bất thường (ngập lụt); giá trị đọc không đáng tin cậy và bỏ qua LLM để thông báo ngay lập tức |
+| Xanh lá | Không có vấn đề | `normal` | Mực nước đầy và độ ẩm đất không bị khô |
+| Vàng | Cảnh báo | `medium` | Mực nước ở mức trung bình (lượng dự trữ đang giảm) trong khi độ ẩm đất vẫn còn chấp nhận được |
+| Cam | Cần chú ý | `high` / `critical` | Đất bị khô, hoặc lượng nước dự trữ thấp, ở ít nhất một trong hai chỉ số |
+
+Thiết kế này giữ sự phân tách rõ ràng giữa hai loại tín hiệu khác nhau: màu đỏ được dành riêng cho lỗi ở chính thiết bị (cảm biến không đáng tin cậy), trong khi xanh lá/vàng/cam truyền đạt rủi ro hạn hán thực tế của đồng ruộng bằng cùng ba mức độ nghiêm trọng mà backend đã áp dụng cho giá trị cảm biến. Vì chỉ sử dụng bốn màu, người vận hành hiện trường chỉ cần học một quy tắc màu ngắn gọn một lần, sau đó có thể phán đoán chính xác trạng thái đồng ruộng từ xa mà không cần đọc bất kỳ giá trị số nào của cảm biến. Về mặt nội bộ, trường `type` trong JSON gửi đến backend vẫn phân biệt đầy đủ mười tình trạng cảm biến cụ thể (xem Chương 4); chỉ có màu vật lý của đèn LED được đơn giản hóa còn bốn, vì vậy thay đổi này không đòi hỏi bất kỳ sửa đổi nào đối với backend hay bảng điều khiển.
+
+### 3. Luồng xử lý (Sơ đồ hoạt động)
+
+Hình 4 là một sơ đồ hoạt động cho thấy thứ tự xử lý dọc theo làn bơi (swim lane) của mỗi đội. Các thanh ngang dày biểu thị các điểm fork/join, cho thấy độ ẩm đất và mực nước được đọc song song.
+
+*Hình 4: Sơ đồ hoạt động — thứ tự xử lý và các làn bơi*
+
+Quá trình xử lý diễn ra như sau. Đội phần cứng trước tiên đọc độ ẩm đất và mực nước song song (fork), và đội edge tổng hợp chúng rồi thực hiện kiểm tra ngưỡng (quyết định sau điểm join). Nếu kết quả là bất thường (ngoài phạm vi, mất kết nối, v.v.), LLM sẽ bị bỏ qua và cảnh báo được gửi ngay lập tức. Nếu bình thường, dữ liệu được gửi đến backend dưới dạng JSON và kết hợp với dữ liệu thời tiết để LLM kiểm tra tính nhất quán. Nếu kết quả kiểm tra không nhất quán, một bất thường theo ngữ cảnh sẽ được gắn cờ; nếu nhất quán, một báo cáo tưới tiêu bình thường sẽ được tạo ra. Trong cả hai trường hợp, người dùng đều được thông báo và quá trình xử lý kết thúc.
+
+Hình 5 và Hình 6 cho thấy kết quả đầu ra thực tế được tạo ra bởi luồng xử lý này: bảng điều khiển backend hiển thị dữ liệu cảm biến theo thời gian thực và phân loại rủi ro, và một ví dụ về thông báo cảnh báo trên Discord.
+
+![Hình 5: Ảnh chụp màn hình bảng điều khiển backend](images/dashboard-screenshot.png)
+
+*Hình 5: Ảnh chụp màn hình bảng điều khiển hiển thị dữ liệu cảm biến theo thời gian thực và phân loại rủi ro.*
+
+![Hình 6: Ảnh chụp màn hình thông báo cảnh báo trên Discord](images/discord-notification.png)
+
+*Hình 6: Ảnh chụp màn hình thông báo cảnh báo được gửi đến Discord.*
+
+### 4. Thiết kế giao diện giữa các đội
+
+Một quyết định thiết kế quan trọng trong dự án này là giới hạn điểm kết nối giữa ba đội chỉ còn một giao diện duy nhất: "Gửi dữ liệu (JSON)". Miễn là lược đồ JSON này được thống nhất trước, các đội phần cứng, edge và backend đều có thể phát triển độc lập và song song với nhau, rút ngắn thời gian phát triển và giảm sự phụ thuộc giữa các đội.
+
+| Điểm kết nối | Mô tả | Giữa các đội |
+| --- | --- | --- |
+| Gửi dữ liệu (JSON) | Dữ liệu cảm biến trong ngưỡng được gửi dưới dạng JSON qua HTTP/MQTT | Edge → Backend |
+| Gửi cảnh báo ngay lập tức | Cảnh báo tức thời bỏ qua LLM khi vượt ngưỡng | Edge → Thông báo |
+
+Bằng cách giảm thiểu điểm kết nối theo cách này, đội phần cứng có thể thay đổi thông số kỹ thuật của cảm biến, đội edge có thể điều chỉnh logic ngưỡng, và đội backend có thể cải thiện các prompt của LLM hoặc tích hợp API, tất cả đều không cần chờ đợi việc triển khai của các đội khác.
+
+### 5. Kết luận và hướng phát triển tương lai
+
+Báo cáo này trình bày kiến trúc và luồng xử lý của một hệ thống giám sát tưới tiêu thông minh kết hợp cảm biến độ ẩm đất và mực nước với LLM. Bằng cách phân biệt giữa cảnh báo tức thời dựa trên ngưỡng và phát hiện bất thường theo ngữ cảnh dựa trên LLM, hệ thống hướng tới việc phản ứng nhanh với các bất thường khẩn cấp, đồng thời cung cấp các khuyến nghị tưới tiêu chi tiết có tính đến điều kiện thời tiết. Hệ thống cũng chú trọng đến khả năng sử dụng ở cả hai đầu của quy trình: ở đầu từ xa, LLM chuyển đổi dữ liệu cảm biến và thời tiết thô thành một bản tóm tắt bằng ngôn ngữ đơn giản cho người dùng không chuyên, trong khi ở đầu tại chỗ, đèn LED RGB trên thiết bị cho phép bất kỳ ai gần đồng ruộng đọc được trạng thái hiện tại ngay khi thiết bị được cấp nguồn, mà không cần đến mạng, backend, hay ứng dụng.
+
+Hướng phát triển trong tương lai bao gồm:
+
+- Hiệu chỉnh các tham số ngưỡng bằng cảm biến phần cứng thực tế, đồng thời dựa trên kiến thức chuyên môn về nông học (ví dụ: hướng dẫn riêng theo từng loại cây trồng và loại đất) thay vì chỉ dựa vào chỉ số cảm biến
+- Vượt ra ngoài một prompt LLM đa dụng, hướng tới logic ra quyết định chuyên biệt cho từng loại cây trồng và đặc điểm đất/địa hình của từng nơi triển khai (ví dụ: thiết kế prompt riêng cho từng địa điểm, tăng cường truy xuất, hoặc tinh chỉnh mô hình), từ đó cải thiện thêm độ chính xác và giảm cảnh báo sai
+- Mở rộng hệ thống từ việc chỉ thông báo trạng thái sang tưới tiêu tự động theo vòng kín (closed-loop), trong đó khuyến nghị của backend trực tiếp điều khiển van hoặc máy bơm thay vì chỉ cảnh báo cho người dùng
+- Tối ưu hóa trải nghiệm người dùng cho từng kênh thông báo (Ứng dụng / LINE / Discord)
+- Kiểm chứng nguồn điện cho cảm biến và khả năng chống thời tiết để vận hành lâu dài
+
+### Lời cảm ơn
+
+Chúng tôi xin cảm ơn tất cả những người đã đóng góp cho dự án này vì sự hỗ trợ của họ.
+
+### Tài liệu tham khảo
+
+Vui lòng tham khảo thông tin thư mục gốc (tiếng Anh) ở phần References phía trên.

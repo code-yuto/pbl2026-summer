@@ -29,6 +29,17 @@ void setLedColor(int r, int g, int b) {
   analogWrite(RGB_BLUE_PIN,  b);
 }
 
+// The LED only ever shows one of these 4 colors, matching the risk_level
+// tiers used by the backend/dashboard (normal / medium / high+critical),
+// plus a hardware-fault color that has no equivalent on the dashboard.
+// Only the LED color is simplified this way; the JSON "type" field sent to
+// the backend keeps its original fine-grained value in every branch below,
+// so nothing on the backend/dashboard side needs to change.
+void ledHardwareFault() { setLedColor(255, 0, 0); }   // RED    - sensor fault / flood, do not trust reading
+void ledNoProblem()     { setLedColor(0, 255, 0); }   // GREEN  - matches backend risk_level "normal"
+void ledCaution()       { setLedColor(255, 255, 0); } // YELLOW - matches backend risk_level "medium"
+void ledNeedsAttention(){ setLedColor(255, 80, 0); }  // ORANGE - matches backend risk_level "high"/"critical"
+
 // In chuỗi JSON gửi về Serial
 void printReading(const char* status_type, int water, int moisture, const char* color_name) {
   Serial.print("{\"type\":\"");
@@ -67,62 +78,62 @@ void loop() {
       moistureValue <= MOISTURE_DISCONNECT || 
       moistureValue >= MOISTURE_SHORT_CIR) {
       
-    setLedColor(255, 0, 0); // Màu Đỏ
-    Serial.println(">>> TRẠNG THÁI: [BÁO ĐỘNG] Lỗi cảm biến hoặc ngập lụt! | LED: ĐỎ");
+    ledHardwareFault();
+    Serial.println(">>> TRẠNG THÁI: [BÁO ĐỘNG] Lỗi cảm biến hoặc ngập lụt! | LED: DO (Machine anomaly)");
     printReading("alert_hardware_or_flood", waterValue, moistureValue, "RED");
   }
   // 2. NƯỚC ĐẦY (water >= 1500)
   else if (waterValue >= WATER_HIGH_THRESH) {
     if (moistureValue < MOISTURE_DRY_THRESH) {
-      setLedColor(255, 255, 0); // Đỏ + Xanh lá = Màu Vàng
-      Serial.println(">>> TRẠNG THÁI: Nước đầy - Đất khô (Cần tưới) | LED: VÀNG");
-      printReading("warning_dry", waterValue, moistureValue, "YELLOW");
-    } 
+      ledNeedsAttention();
+      Serial.println(">>> TRẠNG THÁI: Nước đầy - Đất khô (Cần tưới) | LED: CAM (Needs attention)");
+      printReading("warning_dry", waterValue, moistureValue, "ORANGE");
+    }
     else if (moistureValue > MOISTURE_WET_THRESH) {
-      setLedColor(255, 255, 255); // Đỏ + Xanh lá + Xanh dương = Màu Trắng
-      Serial.println(">>> TRẠNG THÁI: Nước đầy - Đất rất ướt | LED: TRẮNG");
-      printReading("data_wet", waterValue, moistureValue, "WHITE");
-    } 
+      ledNoProblem();
+      Serial.println(">>> TRẠNG THÁI: Nước đầy - Đất rất ướt | LED: XANH LA (No problem)");
+      printReading("data_wet", waterValue, moistureValue, "GREEN");
+    }
     else {
-      setLedColor(0, 255, 0); // Màu Xanh lá
-      Serial.println(">>> TRẠNG THÁI: Nước đầy - Đất độ ẩm vừa (Lý tưởng) | LED: XANH LÁ");
+      ledNoProblem();
+      Serial.println(">>> TRẠNG THÁI: Nước đầy - Đất độ ẩm vừa (Lý tưởng) | LED: XANH LA (No problem)");
       printReading("data_ideal", waterValue, moistureValue, "GREEN");
     }
   }
   // 3. NƯỚC VỪA (300 <= water < 1500)
   else if (waterValue >= WATER_LOW_THRESH) {
     if (moistureValue < MOISTURE_DRY_THRESH) {
-      setLedColor(255, 80, 0); // Màu Cam
-      Serial.println(">>> TRẠNG THÁI: Nước trung bình - Đất khô | LED: CAM");
+      ledNeedsAttention();
+      Serial.println(">>> TRẠNG THÁI: Nước trung bình - Đất khô | LED: CAM (Needs attention)");
       printReading("warning_dry_medium_water", waterValue, moistureValue, "ORANGE");
-    } 
+    }
     else if (moistureValue > MOISTURE_WET_THRESH) {
-      setLedColor(0, 100, 255); // Màu Lam nhạt
-      Serial.println(">>> TRẠNG THÁI: Nước trung bình - Đất ướt | LED: LAM NHẠT");
-      printReading("data_wet_medium_water", waterValue, moistureValue, "LIGHT_BLUE");
-    } 
+      ledCaution();
+      Serial.println(">>> TRẠNG THÁI: Nước trung bình - Đất ướt | LED: VANG (Caution)");
+      printReading("data_wet_medium_water", waterValue, moistureValue, "YELLOW");
+    }
     else {
-      setLedColor(0, 255, 255); // Xanh lá + Xanh dương = Màu Cyan (Xanh lơ)
-      Serial.println(">>> TRẠNG THÁI: Nước trung bình - Đất vừa | LED: XANH LƠ (CYAN)");
-      printReading("data_medium", waterValue, moistureValue, "CYAN");
+      ledCaution();
+      Serial.println(">>> TRẠNG THÁI: Nước trung bình - Đất vừa | LED: VANG (Caution)");
+      printReading("data_medium", waterValue, moistureValue, "YELLOW");
     }
   }
   // 4. NƯỚC CẠN (water < 300)
   else {
     if (moistureValue < MOISTURE_DRY_THRESH) {
-      setLedColor(255, 0, 255); // Đỏ + Xanh dương = Màu Tím
-      Serial.println(">>> TRẠNG THÁI: [CỰC KỲ NGUY HIỂM] Hết nước & Đất khô! | LED: TÍM");
-      printReading("alert_critical_dry_no_water", waterValue, moistureValue, "PURPLE");
-    } 
+      ledNeedsAttention();
+      Serial.println(">>> TRẠNG THÁI: [CỰC KỲ NGUY HIỂM] Hết nước & Đất khô! | LED: CAM (Needs attention)");
+      printReading("alert_critical_dry_no_water", waterValue, moistureValue, "ORANGE");
+    }
     else if (moistureValue > MOISTURE_WET_THRESH) {
-      setLedColor(255, 105, 180); // Màu Hồng
-      Serial.println(">>> TRẠNG THÁI: Cạn nước trong bình - Đất ướt | LED: HỒNG");
-      printReading("warning_low_water_wet_soil", waterValue, moistureValue, "PINK");
-    } 
+      ledNeedsAttention();
+      Serial.println(">>> TRẠNG THÁI: Cạn nước trong bình - Đất ướt | LED: CAM (Needs attention)");
+      printReading("warning_low_water_wet_soil", waterValue, moistureValue, "ORANGE");
+    }
     else {
-      setLedColor(0, 0, 255); // Màu Xanh dương
-      Serial.println(">>> TRẠNG THÁI: Cạn nước trong bình - Đất vừa | LED: XANH DƯƠNG");
-      printReading("warning_low_water", waterValue, moistureValue, "BLUE");
+      ledNeedsAttention();
+      Serial.println(">>> TRẠNG THÁI: Cạn nước trong bình - Đất vừa | LED: CAM (Needs attention)");
+      printReading("warning_low_water", waterValue, moistureValue, "ORANGE");
     }
   }
 
